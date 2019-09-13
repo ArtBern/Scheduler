@@ -7,12 +7,18 @@ import time
 from datetime import datetime
 
 class Utils:
-    def readText(filePath):
+    def readFile(filePath, isBinary):
         html = ''
         try:
-            with open(filePath,  'r' , encoding='utf-8') as fp:
-                html = fp.read()
+            if (isBinary):
+                with open(filePath,  'r+b') as fp:
+                    html = fp.read()
+            else:
+                with open(filePath,  'r' , encoding='utf-8') as fp:
+                    html = fp.read()
+
             Domoticz.Log('Read file: {}'.format(filePath))
+
         except Exception as err:
             Domoticz.Log(traceback.format_exc())
             Domoticz.Error('Error to read file : {}'.format(filePath))

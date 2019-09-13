@@ -35,6 +35,9 @@ import urllib.parse
 import os
 from utils import Utils
 
+#pip3 install accept-types
+from accept_types import get_best_match
+
 class BasePlugin:
     enabled = False
         
@@ -54,9 +57,10 @@ class BasePlugin:
         self.httpServerConn = Domoticz.Connection(Name="Server Connection", Transport="TCP/IP", Protocol="HTTP", Port=Parameters["Mode1"])
         self.httpServerConn.Listen()
 
-        html = Utils.readText(os.path.join(Parameters['HomeFolder'], 'web/html/thermostat_schedule.html'))
+        html = Utils.readFile(os.path.join(Parameters['HomeFolder'], 'web/html/thermostat_schedule.html'), False)
 
         html = html.replace(' src="/', ' src="http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/')
+        html = html.replace(' href="/', ' href="http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/')
 
         Utils.writeText(html, Parameters['StartupFolder'] + 'www/templates/Scheduler-' + str(Parameters["HardwareID"]) + '.html')
 
@@ -87,19 +91,36 @@ class BasePlugin:
                 strURL = Data["URL"]
                 path = urllib.parse.unquote_plus(strURL)
 
-                data = Utils.readText(os.path.join(Parameters['HomeFolder'], path))
- 
-                Connection.Send({"Status":"200", 
-                                "Headers": {"Connection": "keep-alive", 
-                                            "Accept": "Content-Type: text/html; charset=UTF-8",
-                                            "Accept-Encoding": "gzip, deflate",
-                                            "Access-Control-Allow-Origin":"http://" + Parameters['Address'] + ":" + Parameters['Port'] + "",
-                                            "Cache-Control": "no-cache, no-store, must-revalidate",
-                                            "Content-Type": "text/html; charset=UTF-8",
-                                            "Content-Length":""+str(len(data))+"",
-                                            "Pragma": "no-cache",
-                                            "Expires": "0"},
-                                "Data": data})
+                return_type = get_best_match(Data['Headers']['Accept'], ['text/html', 'image/png', 'text/css', '*/*'])
+
+                if (return_type == 'text/html' or return_type == 'text/css'):
+                    data = Utils.readFile(os.path.join(Parameters['HomeFolder'], "web" + path), False)
+     
+                    Connection.Send({"Status":"200", 
+                                    "Headers": {"Connection": "keep-alive", 
+                                                "Accept-Encoding": "gzip, deflate",
+                                                "Access-Control-Allow-Origin":"http://" + Parameters['Address'] + ":" + Parameters['Port'] + "",
+                                                "Cache-Control": "no-cache, no-store, must-revalidate",
+                                                "Content-Type": return_type + "; charset=UTF-8",
+                                                "Content-Length":""+str(len(data))+"",
+                                                "Pragma": "no-cache",
+                                                "Expires": "0"},
+                                    "Data": data})
+
+                elif return_type == 'image/png':
+                    data = Utils.readFile(os.path.join(Parameters['HomeFolder'], "web" + path), True)
+     
+                    Connection.Send({"Status":"200", 
+                                    "Headers": {"Connection": "keep-alive", 
+                                                "Accept-Encoding": "gzip, deflate",
+                                                "Access-Control-Allow-Origin":"http://" + Parameters['Address'] + ":" + Parameters['Port'] + "",
+                                                "Cache-Control": "no-cache, no-store, must-revalidate",
+                                                "Content-Type": return_type,
+                                                "Pragma": "no-cache",
+                                                "Expires": "0"},
+                                    "Data": data})
+                elif return_type == None:
+                   Connection.Send({"Status":"406"}) 
                                 
             elif (strVerb == "POST"):
                 self.httpClientConn.Send({"Status":"200 OK", "Headers": {"Connection": "keep-alive", "Accept": "Content-Type: text/html; charset=UTF-8"}, "Data": data})
