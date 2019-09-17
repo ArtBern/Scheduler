@@ -35,6 +35,16 @@ import urllib.parse
 import os
 from utils import Utils
 
+#try:
+    #apt-get install libmagic-dev
+    #pip3 install python-libmagic
+import magic
+#except OSError as e:
+#    Domoticz.Log ("Error loading python-libmagic: {0}:{1}".format(e.__class__.__name__, e.message))
+#except AttributeError as e:
+#    Domoticz.Log ("Error loading python-libmagic: {0}:{1}".format(e.__class__.__name__, e.message)) 
+
+
 #pip3 install accept-types
 from accept_types import get_best_match
 
@@ -61,6 +71,7 @@ class BasePlugin:
 
         html = html.replace(' src="/', ' src="http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/')
         html = html.replace(' href="/', ' href="http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/')
+        html = html.replace('"schedule.json"', '"http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/thermostat_schedule.json"')
 
         Utils.writeText(html, Parameters['StartupFolder'] + 'www/templates/Scheduler-' + str(Parameters["HardwareID"]) + '.html')
 
@@ -89,12 +100,19 @@ class BasePlugin:
             if (strVerb == "GET"):
 
                 strURL = Data["URL"]
-                path = urllib.parse.unquote_plus(strURL)
+                path = urllib.parse.unquote_plus(urllib.parse.urlparse(strURL).path)
+                filePath = os.path.join(Parameters['HomeFolder'], "web" + path)
 
-                return_type = get_best_match(Data['Headers']['Accept'], ['text/html', 'image/png', 'text/css', '*/*'])
+                with magic.Magic() as m:
+                    mimetype = m.from_file(filePath)
+                
+                LogMessage("Mime type determined as "+ mimetype)
 
-                if (return_type == 'text/html' or return_type == 'text/css'):
-                    data = Utils.readFile(os.path.join(Parameters['HomeFolder'], "web" + path), False)
+                #return_type = get_best_match(Data['Headers']['Accept'], ['text/html', 'image/png', 'text/css', '*/*'])
+                return_type = mimetype
+
+                if (return_type == 'text/html' or return_type == 'text/css' or return_type == 'text/plain'):
+                    data = Utils.readFile(filePath, False)
      
                     Connection.Send({"Status":"200", 
                                     "Headers": {"Connection": "keep-alive", 
@@ -107,8 +125,10 @@ class BasePlugin:
                                                 "Expires": "0"},
                                     "Data": data})
 
-                elif return_type == 'image/png':
-                    data = Utils.readFile(os.path.join(Parameters['HomeFolder'], "web" + path), True)
+                elif return_type == 'image/png' or return_type == 'image/x-icon':
+                    data = Utils.readFile(filePath, True)
+
+                    LogMessage("Legth is " + str(len(data)))
      
                     Connection.Send({"Status":"200", 
                                     "Headers": {"Connection": "keep-alive", 
@@ -204,13 +224,20 @@ def LogMessage(Message):
         f.write(Message)
         f.close()   
 
-def DumpHTTPResponseToLog(httpDict):
-    if isinstance(httpDict, dict):
-        Domoticz.Log("HTTP Details ("+str(len(httpDict))+"):")
-        for x in httpDict:
-            if isinstance(httpDict[x], dict):
-                Domoticz.Log("--->'"+x+" ("+str(len(httpDict[x]))+"):")
-                for y in httpDict[x]:
-                    Domoticz.Log("------->'" + y + "':'" + str(httpDict[x][y]) + "'")
+def DumpHTTPResponseToLog(httpResp, level=0):
+    if (level==0): Domoticz.Debug("HTTP Details ("+str(len(httpResp))+"):")
+    indentStr = ""
+    for x in range(level):
+        indentStr += "----"
+    if isinstance(httpResp, dict):
+        for x in httpResp:
+            if not isinstance(httpResp[x], dict) and not isinstance(httpResp[x], list):
+                Domoticz.Debug(indentStr + ">'" + x + "':'" + str(httpResp[x]) + "'")
             else:
-                Domoticz.Log("--->'" + x + "':'" + str(httpDict[x]) + "'")
+                Domoticz.Debug(indentStr + ">'" + x + "':")
+                DumpHTTPResponseToLog(httpResp[x], level+1)
+    elif isinstance(httpResp, list):
+        for x in httpResp:
+            Domoticz.Debug(indentStr + "['" + x + "']")
+    else:
+        Domoticz.Debug(indentStr + ">'" + x + "':'" + str(httpResp[x]) + "'")

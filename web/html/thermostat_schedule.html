@@ -80,9 +80,9 @@
 	$( "#slider-horizontal" ).slider({
 	  orientation: "horizontal",
 	  range: "min",
-	  min: @@minTemp@@,
-	  max: @@maxTemp@@,
-	  step: @@tempStep@@,
+	  min: "0",
+	  max: "30",
+	  step: "0.5",
 	  value: "21.0",
 	  slide: function( event, ui ) {
 		$( "#temp" ).val( ui.value.toFixed( 1 ) );
