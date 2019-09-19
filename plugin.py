@@ -33,6 +33,7 @@
 import Domoticz
 import urllib.parse
 import os
+import sqlite3
 from utils import Utils
 
 #try:
@@ -53,6 +54,7 @@ class BasePlugin:
         
     httpServerConn = None
     httpServerConns = {}
+    dbConnection = None
     
     
     def __init__(self):
@@ -68,17 +70,35 @@ class BasePlugin:
         self.httpServerConn.Listen()
 
         html = Utils.readFile(os.path.join(Parameters['HomeFolder'], 'web/html/thermostat_schedule.html'), False)
+        json = Utils.readFile(os.path.join(Parameters['HomeFolder'], 'web/thermostat_schedule.json'), False)
 
         html = html.replace(' src="/', ' src="http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/')
         html = html.replace(' href="/', ' href="http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/')
         html = html.replace('"schedule.json"', '"http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/thermostat_schedule.json"')
+        html = html.replace('"save"', '"http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/save"')
 
         Utils.writeText(html, Parameters['StartupFolder'] + 'www/templates/Scheduler-' + str(Parameters["HardwareID"]) + '.html')
 
+        self.dbConnection = sqlite3.connect(Parameters['Database'])
+
+        c = self.dbConnection.cursor()
+
+        c.execute('''CREATE TABLE IF NOT EXISTS SchedulerPlugin(HardwareID real, json text, UNIQUE(HardwareID))''')
+
+        c.execute('INSERT OR IGNORE INTO SchedulerPlugin(HardwareID, json) VALUES (?,?)', (Parameters["HardwareID"], json))
+
+        self.dbConnection.commit()
+        
         Domoticz.Log("Leaving on start")
         
     def onStop(self):
-        Domoticz.Log("onStop called")
+        LogMessage("onStop called")
+
+        if self.dbConnection != None:
+            self.dbConnection.close()
+
+        LogMessage("Leaving onStop")
+
 
     def onConnect(self, Connection, Status, Description):
         if (Status == 0):
@@ -111,7 +131,25 @@ class BasePlugin:
                 #return_type = get_best_match(Data['Headers']['Accept'], ['text/html', 'image/png', 'text/css', '*/*'])
                 return_type = mimetype
 
-                if (return_type == 'text/html' or return_type == 'text/css' or return_type == 'text/plain'):
+                if path == 'thermostat_schedule.json':
+                    c = self.dbConnection.cursor()
+                    c.execute('SELECT json FROM SchedulerPlugin WHERE HardwareID=?', (Parameters["HardwareID"],))
+                    data = c.fetchone()
+
+                    self.dbConnection.commit()
+
+                    Connection.Send({"Status":"200", 
+                                    "Headers": {"Connection": "keep-alive", 
+                                                "Accept-Encoding": "gzip, deflate",
+                                                "Access-Control-Allow-Origin":"http://" + Parameters['Address'] + ":" + Parameters['Port'] + "",
+                                                "Cache-Control": "no-cache, no-store, must-revalidate",
+                                                "Content-Type": "application/json; charset=UTF-8",
+                                                "Content-Length":""+str(len(data))+"",
+                                                "Pragma": "no-cache",
+                                                "Expires": "0"},
+                                    "Data": data})               
+
+                elif (return_type == 'text/html' or return_type == 'text/css' or return_type == 'text/plain'):
                     data = Utils.readFile(filePath, False)
      
                     Connection.Send({"Status":"200", 
@@ -143,7 +181,52 @@ class BasePlugin:
                    Connection.Send({"Status":"406"}) 
                                 
             elif (strVerb == "POST"):
-                self.httpClientConn.Send({"Status":"200 OK", "Headers": {"Connection": "keep-alive", "Accept": "Content-Type: text/html; charset=UTF-8"}, "Data": data})
+
+                strURL = Data["URL"]
+                path = urllib.parse.unquote_plus(urllib.parse.urlparse(strURL).path)
+
+                if (path == "/save"):
+
+                    json = Data["Data"]
+
+                    cur = self.dbConnection.cursor()
+
+                    cur.execute("UPDATE SchedulerPlugin SET json=? WHERE HardwareID=?", (json, Parameters["HardwareID"]))
+
+                    LogMessage("Number of rows updated: {}".format(cur.rowcount))
+
+                    self.dbConnection.commit()
+
+                    filePath = os.path.join(Parameters['HomeFolder'], "web" + "/html1/thermostat_saved.html")
+
+                    data = Utils.readFile(filePath, False)
+     
+                    Connection.Send({"Status":"200", 
+                                    "Headers": {"Connection": "keep-alive", 
+                                                "Accept-Encoding": "gzip, deflate",
+                                                "Access-Control-Allow-Origin":"http://" + Parameters['Address'] + ":" + Parameters['Port'] + "",
+                                                "Cache-Control": "no-cache, no-store, must-revalidate",
+                                                "Content-Type": "text/html; charset=UTF-8",
+                                                "Content-Length":""+str(len(data))+"",
+                                                "Pragma": "no-cache",
+                                                "Expires": "0"},
+                                    "Data": data})
+
+
+            elif (strVerb == "OPTIONS"):
+                Connection.Send({"Status":"200 OK", 
+                                "Headers": { 
+                                            "Access-Control-Allow-Origin":"*",
+                                            "Access-Control-Allow-Methods":"POST, GET, OPTIONS",
+                                            "Access-Control-Max-Age":"86400",
+                                            "Access-Control-Allow-Headers": "Content-Type",
+                                            "Vary":"Accept-Encoding, Origin",
+                                            "Content-Encoding": "gzip",
+                                            "Content-Length": "0",
+                                            "Keep-Alive": "timeout=2, max=100",
+                                            "Connection": "Keep-Alive",
+                                            "Content-Type": "text/plain"}
+                                            })
             else:
                 Domoticz.Error("Unknown verb in request: "+strVerb)
 
