@@ -110,15 +110,30 @@
 		  }
 	    }
 		 
-		$.ajax( "save", {
-			data: JSON.stringify( sched_json, null, 4  ),
-			contentType: 'application/json',
-			async: false,
-			type : 'POST', 
-			success: function( html ) {
-				window.document.write( html );
-			}		
+		ShowNotify($.t('Saving schedule') + ' ');
+
+		$.ajax({
+				url: "save",
+				data: JSON.stringify( sched_json, null, 4  ),
+				contentType: 'application/json',
+				async: false,
+				type : 'POST', 		
+				success: function (data) {
+				if (data.status == "ERROR") {
+					HideNotify();
+					bootbox.alert($.t(data.message));
+				}
+				//wait 1 second
+				setTimeout(function () {
+					HideNotify();
+				}, 1000);
+			},
+			error: function () {
+				HideNotify();
+				bootbox.alert($.t('Problem saving schedule'));
+			}
 		});
+
 
 	};
 
@@ -173,13 +188,22 @@
 		<table width="500px">
 				<tr>
 					<td width="20%" align="center"><img src="/images/logo.png" width="40px" height="40px">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td>
-					<td width="55%"align="center"><b>Thermostat v@@version@@ Schedule</b><br>@@dt@@</td>
+					<td width="55%"align="center"><b>Thermostat Schedule</b><br>@@dt@@</td>
 					<td width="25%" align="right"><select id="schedule-select"></select></td>
 				</tr>
 		</table>
 	   
-	   <div id="heat"></div>
-	   <div id="cool"></div>
+
+	   <table id="itemtablenostatus" style="display: inline;">
+	   	<tbody style="display: table-row-group;">
+	   		<tr>
+	   			<td style="display: inline-table;">
+	   				<div id="heat"></div>
+	   				<div id="cool"></div>
+	   			</td>
+	   		</tr>
+	   	</tbody>
+	   </table>
 
 	   <div id="entryDetails" style="width:500px">
 		   <br>

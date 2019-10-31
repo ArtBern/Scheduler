@@ -107,8 +107,10 @@ class BasePlugin:
             Domoticz.Log("Failed to connect ("+str(Status)+") to: "+Connection.Address+":"+Connection.Port+" with error: "+Description)
         Domoticz.Log(str(Connection))
 
+        self.httpServerConns[Connection.Name] = Connection
+
     def onMessage(self, Connection, Data):
-        Domoticz.Log("onMessage called for connection: "+Connection.Address+":"+Connection.Port)
+        Domoticz.Log("onMessage called for connection: "+Connection.Address+":"+Connection.Port+":"+Connection.Name)
         DumpHTTPResponseToLog(Data)
         
         # Incoming Requests
@@ -126,16 +128,18 @@ class BasePlugin:
                 with magic.Magic() as m:
                     mimetype = m.from_file(filePath)
                 
-                LogMessage("Mime type determined as "+ mimetype)
+                LogMessage("Mime type determined as " + mimetype)
+                LogMessage("Path is " + path)
 
                 #return_type = get_best_match(Data['Headers']['Accept'], ['text/html', 'image/png', 'text/css', '*/*'])
                 return_type = mimetype
 
-                if path == 'thermostat_schedule.json':
+                if path == '/thermostat_schedule.json':
+
                     c = self.dbConnection.cursor()
                     c.execute('SELECT json FROM SchedulerPlugin WHERE HardwareID=?', (Parameters["HardwareID"],))
-                    data = c.fetchone()
-
+                    data = c.fetchone()[0]
+                    
                     self.dbConnection.commit()
 
                     Connection.Send({"Status":"200", 
@@ -193,20 +197,16 @@ class BasePlugin:
 
                     cur.execute("UPDATE SchedulerPlugin SET json=? WHERE HardwareID=?", (json, Parameters["HardwareID"]))
 
-                    LogMessage("Number of rows updated: {}".format(cur.rowcount))
-
                     self.dbConnection.commit()
 
-                    filePath = os.path.join(Parameters['HomeFolder'], "web" + "/html1/thermostat_saved.html")
-
-                    data = Utils.readFile(filePath, False)
+                    data = "{""status"":""OK""}"
      
                     Connection.Send({"Status":"200", 
                                     "Headers": {"Connection": "keep-alive", 
                                                 "Accept-Encoding": "gzip, deflate",
                                                 "Access-Control-Allow-Origin":"http://" + Parameters['Address'] + ":" + Parameters['Port'] + "",
                                                 "Cache-Control": "no-cache, no-store, must-revalidate",
-                                                "Content-Type": "text/html; charset=UTF-8",
+                                                "Content-Type": "application/json; charset=UTF-8",
                                                 "Content-Length":""+str(len(data))+"",
                                                 "Pragma": "no-cache",
                                                 "Expires": "0"},
@@ -238,9 +238,7 @@ class BasePlugin:
 
     def onDisconnect(self, Connection):
         Domoticz.Log("onDisconnect called for connection '"+Connection.Name+"'.")
-        Domoticz.Log("Server Connections:")
-        for x in self.httpServerConns:
-            Domoticz.Log("--> "+str(x)+"'.")
+
         if Connection.Name in self.httpServerConns:
             del self.httpServerConns[Connection.Name]
 
