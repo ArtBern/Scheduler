@@ -36,6 +36,9 @@ import os
 import sqlite3
 from utils import Utils
 
+# sudo pip3 install git+git://github.com/ArtBern/Domoticz-API.git -t /usr/lib/python3.5 --upgrade
+import DomoticzAPI as dom
+
 #try:
     #apt-get install libmagic-dev
     #pip3 install python-libmagic
@@ -55,6 +58,7 @@ class BasePlugin:
     httpServerConn = None
     httpServerConns = {}
     dbConnection = None
+    domServer = None
     
     
     def __init__(self):
@@ -88,6 +92,13 @@ class BasePlugin:
         c.execute('INSERT OR IGNORE INTO SchedulerPlugin(HardwareID, json) VALUES (?,?)', (Parameters["HardwareID"], json))
 
         self.dbConnection.commit()
+
+        if (len(Devices) == 0):
+            Domoticz.Device(Name="Thermostat", Unit=1, Type=242, Subtype=1, Used=1).Create()
+
+        self.domServer = dom.Server()
+
+        Domoticz.Log("Domoticz-API server is: " + str(self.domServer))
         
         Domoticz.Log("Leaving on start")
         
