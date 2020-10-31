@@ -33,6 +33,7 @@
 import Domoticz
 import urllib.parse
 import os
+import json
 import sqlite3
 from utils import Utils
 
@@ -62,7 +63,7 @@ class BasePlugin:
     
     
     def __init__(self):
-        #self.var = 123
+        self.__domServer = dom.Server("localhost", "81")
         return
 
     def onStart(self):
@@ -74,7 +75,7 @@ class BasePlugin:
         self.httpServerConn.Listen()
 
         html = Utils.readFile(os.path.join(Parameters['HomeFolder'], 'web/html/thermostat_schedule.html'), False)
-        json = Utils.readFile(os.path.join(Parameters['HomeFolder'], 'web/thermostat_schedule.json'), False)
+        #json = Utils.readFile(os.path.join(Parameters['HomeFolder'], 'web/thermostat_schedule.json'), False)
 
         html = html.replace(' src="/', ' src="http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/')
         html = html.replace(' href="/', ' href="http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/')
@@ -83,23 +84,23 @@ class BasePlugin:
 
         Utils.writeText(html, Parameters['StartupFolder'] + 'www/templates/Scheduler-' + str(Parameters["HardwareID"]) + '.html')
 
-        self.dbConnection = sqlite3.connect(Parameters['Database'])
+        #self.dbConnection = sqlite3.connect(Parameters['Database'])
 
-        c = self.dbConnection.cursor()
+        #c = self.dbConnection.cursor()
 
-        c.execute('''CREATE TABLE IF NOT EXISTS SchedulerPlugin(HardwareID real, json text, UNIQUE(HardwareID))''')
+        #c.execute('''CREATE TABLE IF NOT EXISTS SchedulerPlugin(HardwareID real, json text, UNIQUE(HardwareID))''')
 
-        c.execute('INSERT OR IGNORE INTO SchedulerPlugin(HardwareID, json) VALUES (?,?)', (Parameters["HardwareID"], json))
+        #c.execute('INSERT OR IGNORE INTO SchedulerPlugin(HardwareID, json) VALUES (?,?)', (Parameters["HardwareID"], json))
 
-        self.dbConnection.commit()
+        #self.dbConnection.commit()
 
         if (len(Devices) == 0):
             Domoticz.Device(Name="Thermostat", Unit=1, Type=242, Subtype=1, Used=1).Create()
 
-        self.domServer = dom.Server()
+        Domoticz.Log("Domoticz-API server is: " + str(self.__domServer))
 
-        Domoticz.Log("Domoticz-API server is: " + str(self.domServer))
-        
+        self.__thermostat = dom.Device(self.__domServer, Devices[1].ID)
+   
         Domoticz.Log("Leaving on start")
         
     def onStop(self):
@@ -147,11 +148,14 @@ class BasePlugin:
 
                 if path == '/thermostat_schedule.json':
 
-                    c = self.dbConnection.cursor()
-                    c.execute('SELECT json FROM SchedulerPlugin WHERE HardwareID=?', (Parameters["HardwareID"],))
-                    data = c.fetchone()[0]
+                    #c = self.dbConnection.cursor()
+                    #c.execute('SELECT json FROM SchedulerPlugin WHERE HardwareID=?', (Parameters["HardwareID"],))
+                    #data = c.fetchone()[0]
                     
-                    self.dbConnection.commit()
+                    #self.dbConnection.commit()
+
+                    timers = dom.SetPointTimer.loadbythermostat(self.__thermostat)
+                    data = str(TimersToJson(timers)).replace("'", "\"")
 
                     Connection.Send({"Status":"200", 
                                     "Headers": {"Connection": "keep-alive", 
@@ -204,11 +208,23 @@ class BasePlugin:
 
                     json = Data["Data"]
 
-                    cur = self.dbConnection.cursor()
+                    newtimers = JsonToTimers(self.__thermostat, json)
+                    
+                    oldtimers = dom.SetPointTimer.loadbythermostat(self.__thermostat)
+                    
+                    for oldtimer in oldtimers:
+                        if (oldtimer.timertype is dom.TimerTypes.TME_TYPE_ON_TIME):
+                            oldtimer.delete()
+                            
+                    for newtimer in newtimers:
+                        newtimer.add()
+                                      
+                    
+                    #cur = self.dbConnection.cursor()
 
-                    cur.execute("UPDATE SchedulerPlugin SET json=? WHERE HardwareID=?", (json, Parameters["HardwareID"]))
+                    #cur.execute("UPDATE SchedulerPlugin SET json=? WHERE HardwareID=?", (json, Parameters["HardwareID"]))
 
-                    self.dbConnection.commit()
+                    #self.dbConnection.commit()
 
                     data = "{""status"":""OK""}"
      
@@ -292,6 +308,39 @@ def onHeartbeat():
     _plugin.onHeartbeat()
 
 # Generic helper functions
+def TimersToJson(timers):
+    tmrdict = { "heat": { "monday": [], "tuesday": [], "wednesday": [], "thursday": [], "friday" : [], "saturday": [], "sunday": []}, "cool": { "monday": [], "tuesday": [], "wednesday": [], "thursday": [], "friday" : [], "saturday": [], "sunday": []}}
+    tmrheat = tmrdict["heat"]
+    #return tmrdict
+    for timer in timers:
+        if (timer.timertype == dom.TimerTypes.TME_TYPE_ON_TIME):
+            if dom.TimerDays.Monday in timer.days:
+                tmrheat["monday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
+            if dom.TimerDays.Tuesday in timer.days:
+                tmrheat["tuesday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
+            if dom.TimerDays.Wednesday in timer.days:
+                tmrheat["wednesday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
+            if dom.TimerDays.Thursday in timer.days:
+                tmrheat["thursday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
+            if dom.TimerDays.Friday in timer.days:
+                tmrheat["friday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
+            if dom.TimerDays.Saturday in timer.days:
+                tmrheat["saturday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
+            if dom.TimerDays.Sunday in timer.days:
+                tmrheat["sunday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])   
+    return tmrdict
+        
+def JsonToTimers(device, data):
+    dict = json.loads(data)
+    plan = dict["heat"]
+    timers = []
+    for day in plan:
+        timerday = dom.TimerDays[day.capitalize()]
+        for tmr in plan[day]:
+            timers.append(dom.SetPointTimer(device, Active=True, Days=timerday, Temperature=tmr[1], Time=tmr[0], Type=dom.TimerTypes.TME_TYPE_ON_TIME))
+    
+    return timers
+
 def DumpConfigToLog():
     for x in Parameters:
         if Parameters[x] != "":
