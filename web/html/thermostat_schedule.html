@@ -76,14 +76,13 @@
 	   scheduleSliders[ 1 ].setSelected( null );  // Remove all selections when schedule changes
 	});
 
-
 	$( "#slider-horizontal" ).slider({
 	  orientation: "horizontal",
 	  range: "min",
-	  min: "0",
-	  max: "30",
-	  step: "0.5",
-	  value: "21.0",
+	  min: 0,
+	  max: 30,
+	  step: 0.5,
+	  value: 21.0,
 	  slide: function( event, ui ) {
 		$( "#temp" ).val( ui.value.toFixed( 1 ) );
 		var entry = $( "#entryDetails" ).data( 'selectedScheduleEntry' );
