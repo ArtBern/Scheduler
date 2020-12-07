@@ -118,19 +118,19 @@
 				async: false,
 				type : 'POST', 		
 				success: function (data) {
-				if (data.status == "ERROR") {
+					if (data.status == "ERROR") {
+						HideNotify();
+						bootbox.alert($.t(data.message));
+					}
+					//wait 1 second
+					setTimeout(function () {
+						HideNotify();
+					}, 1000);
+				},
+				error: function (jqxhr, status, error) {
 					HideNotify();
-					bootbox.alert($.t(data.message));
+					bootbox.alert($.t('Problem saving schedule.' + status + '. ' + error));
 				}
-				//wait 1 second
-				setTimeout(function () {
-					HideNotify();
-				}, 1000);
-			},
-			error: function () {
-				HideNotify();
-				bootbox.alert($.t('Problem saving schedule'));
-			}
 		});
 
 

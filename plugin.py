@@ -35,6 +35,7 @@ import urllib.parse
 import os
 import json
 import sqlite3
+import base64
 from utils import Utils
 
 # sudo pip3 install git+git://github.com/ArtBern/Domoticz-API.git -t /usr/lib/python3.5 --upgrade
@@ -75,12 +76,23 @@ class BasePlugin:
         self.httpServerConn.Listen()
 
         html = Utils.readFile(os.path.join(Parameters['HomeFolder'], 'web/html/thermostat_schedule.html'), False)
+        javascript = Utils.readFile(os.path.join(Parameters['HomeFolder'], 'web/javascript/thermostat_schedule.js'), False)
+        pointer = Utils.readFile(os.path.join(Parameters['HomeFolder'], 'web/images/downArrow_white.png'), True)
+        pointerselected = Utils.readFile(os.path.join(Parameters['HomeFolder'], 'web/images/downArrow_red.png'), True)
         #json = Utils.readFile(os.path.join(Parameters['HomeFolder'], 'web/thermostat_schedule.json'), False)
 
+        html = html.replace('src="/images/downArrow_white.png"', 'src="data:image/png;base64, ' + base64.b64encode(pointer).decode("ascii") + '"')
+        html = html.replace('src="/images/downArrow_red.png"', 'src="data:image/png;base64, ' + base64.b64encode(pointerselected).decode("ascii") + '"')
+        
+
+        html = html.replace('<script src="/javascript/thermostat_schedule.js">', '<script>' + javascript)
+        
         html = html.replace(' src="/', ' src="http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/')
         html = html.replace(' href="/', ' href="http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/')
         html = html.replace('"schedule.json"', '"http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/thermostat_schedule.json"')
         html = html.replace('"save"', '"http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/save"')
+        
+
 
         Utils.writeText(html, Parameters['StartupFolder'] + 'www/templates/Scheduler-' + str(Parameters["HardwareID"]) + '.html')
 
@@ -226,7 +238,7 @@ class BasePlugin:
 
                     #self.dbConnection.commit()
 
-                    data = "{""status"":""OK""}"
+                    data = "{\"status\":\"OK\"}"
      
                     Connection.Send({"Status":"200", 
                                     "Headers": {"Connection": "keep-alive", 

@@ -24,6 +24,7 @@ ScheduleEntry.prototype.draw = function( ctx, selected ) {
       ctx.font = 'bold 8pt Arial';
 	  ctx.fillStyle = "red";
   } else {
+	  
 	  ctx.fillStyle = "black";
 	  ctx.font = '8pt Arial';
 	  ctx.drawImage(  this.ss.img, this.x, this.y  );
