@@ -12,6 +12,8 @@
 
   <script src="/javascript/thermostat_schedule.js"></script>
   
+  <script src="/tobereplaced.js"></script>
+  
  <script>
 
   $(function() {
@@ -25,62 +27,77 @@
 		$('meta[ name=viewport ]').attr( 'content', 'user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0' );
 	}
 
-	var schedules = [ "heat", "cool" ];
 	var days = [ "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" ];
 	var scheduleSliders = [];
 
 	$.ajaxSetup( { cache: false } );
+	
+	reloadSchedule = function() {
 
-	$.getJSON( "schedule.json", function( data ) {
-	  for( s = 0; s < schedules.length; s++ ) {
-		  schedule = schedules[ s ];
-
-		  $('#schedule-select').append( $('<option>', {
-			value: schedule,
-			text: schedule
-		  }));
-
-		  for( i = 0; i < days.length; i++ ) {
-			var day = days[ i ].toLowerCase();
+		$.getJSON( "timer_plans.json", function( data ) {
 			
-			var canvas = $('<canvas>').attr({
-							id: schedule + "-" + day,
-							width: 500,
-							height: 78
-						 }).appendTo( "#" + schedule )[ 0 ];
-
-			$('<br>').appendTo( "#" + schedule );
-
-			var ss = new ScheduleSlider( schedule, days[ i ], canvas, "pointer", "pointer-selected", scheduleSliders );
 			
-			scheduleSliders.push( ss );
-		
-			var entries = data[ schedule ][ day ]
-
-			for( j = 0; j < entries.length; j++ ) {
-				var entry = entries[ j ];
-				ss.addScheduleEntry( new ScheduleEntry( entry[ 0 ], entry[ 1 ], ss ) ); 
+			$('#schedule-select').empty();
+			$('#schedule-select').off('change','**');
+			
+			for( i = 0; i < data.length; i ++) {
+			  $('#schedule-select').append( $('<option>', {
+				value: data[i].idx,
+				text: data[i].Name
+			  }));
+			  
+			  if (data[i].isactive == "true")
+			  {
+				$('#schedule-select').val(data[i].idx);
+			  }
 			}
-		  }
-	  }
-	});
+			
+			$('#schedule-select').on( 'change', function() {
+ 
+				//debugger;
+				changeTimerPlan($('#schedule-select').find( ":selected" ).val())
 
-	$('#schedule-select').on( 'change', function() {
-  	   for( s = 0; s < schedules.length; s++ ) {
-		  schedule = schedules[ s ];
-		  $( "#" + schedule ).hide();
-       }
+				reloadSchedule();
+			});
 
-	   $( "#" + $('#schedule-select').find( ":selected" ).text() ).show();
+		});
+		
+		$.getJSON( "schedule.json", function( data ) {
+			
+			$("#canvas").empty();
+			
+			for( i = 0; i < days.length; i++ ) {
+				var day = days[ i ].toLowerCase();
+				var canvas = $('<canvas>').attr({
+								id: "canvas-" + day,
+								width: 500,
+								height: 78
+							 }).appendTo( "#canvas")[ 0 ];
 
-	   scheduleSliders[ 1 ].setSelected( null );  // Remove all selections when schedule changes
-	});
+				$('<br>').appendTo( "#canvas" );
+
+				var ss = new ScheduleSlider( days[ i ], canvas, "pointer", "pointer-selected", scheduleSliders );
+
+				scheduleSliders.push( ss );
+
+				var entries = data[ day ]
+
+				for( j = 0; j < entries.length; j++ ) {
+					var entry = entries[ j ];
+					ss.addScheduleEntry( new ScheduleEntry( entry[ 0 ], entry[ 1 ], ss ) ); 
+				}
+			}
+
+		});
+	}
+
+	reloadSchedule();
 
 	$( "#slider-horizontal" ).slider({
 	  orientation: "horizontal",
 	  range: "min",
 	  min: 0,
-	  max: 30,
+	  max: maxslider,
 	  step: 0.5,
 	  value: 21.0,
 	  slide: function( event, ui ) {
@@ -100,12 +117,9 @@
 
 		for( s = 0; s < scheduleSliders.length; s++ ) {
 		  ss = scheduleSliders[ s ];
-		  if( typeof sched_json[ ss.schedule ] === 'undefined' ) {
-			  sched_json[ ss.schedule ] = {};
-	      }
-		  sched_json[ ss.schedule ][ ss.day.toLowerCase() ] = [];
+		  sched_json[ ss.day.toLowerCase() ] = [];
 		  for( i = 0; i < ss.entries.length; i++ ) {
-		  	sched_json[ ss.schedule ][ ss.day.toLowerCase() ].push( [ ss.entries[ i ].hhmm, ss.entries[ i ].temp ] );
+		  	sched_json[ ss.day.toLowerCase() ].push( [ ss.entries[ i ].hhmm, ss.entries[ i ].temp ] );
 		  }
 	    }
 		 
@@ -130,6 +144,38 @@
 				error: function (jqxhr, status, error) {
 					HideNotify();
 					bootbox.alert($.t('Problem saving schedule.' + status + '. ' + error));
+				}
+		});
+
+
+	};
+
+	changeTimerPlan = function(idx) {
+		
+		ShowNotify($.t('Changing Timer Plan') + ' ');
+		
+		active_timer = {};
+		active_timer["activetimerplan"] = idx;
+
+		$.ajax({
+				url: "changetimerplan",
+				data: JSON.stringify( active_timer, null, 4  ),
+				contentType: 'application/json',
+				async: false,
+				type : 'POST', 		
+				success: function (data) {
+					if (data.status == "ERROR") {
+						HideNotify();
+						bootbox.alert($.t(data.message));
+					}
+					//wait 1 second
+					setTimeout(function () {
+						HideNotify();
+					}, 1000);
+				},
+				error: function (jqxhr, status, error) {
+					HideNotify();
+					bootbox.alert($.t('Problem changing Timer Plan.' + status + '. ' + error));
 				}
 		});
 
@@ -197,8 +243,7 @@
 	   	<tbody style="display: table-row-group;">
 	   		<tr>
 	   			<td style="display: inline-table;">
-	   				<div id="heat"></div>
-	   				<div id="cool"></div>
+	   				<div id="canvas"></div>
 	   			</td>
 	   		</tr>
 	   	</tbody>

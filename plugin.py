@@ -20,6 +20,7 @@
         <param field="Address" label="IP Address" width="180px" required="true" default="192.168.1.x"/>
         <param field="Port" label="Domoticz Port" width="60px" required="true" default="8080"/>
         <param field="Mode1" label="Listener Port" width="60px" required="true" default="9005"/>
+        <param field="Mode2" label="Max temperature" width="60px" required="true" default="30"/>
         <param field="Mode6" label="Debug" width="100px">
             <options>
                 <option label="True" value="Debug"/>
@@ -34,7 +35,6 @@ import Domoticz
 import urllib.parse
 import os
 import json
-import sqlite3
 import base64
 from utils import Utils
 
@@ -59,12 +59,13 @@ class BasePlugin:
         
     httpServerConn = None
     httpServerConns = {}
-    dbConnection = None
     domServer = None
     
     
     def __init__(self):
         self.__domServer = dom.Server("localhost", "81")
+        #self.__domServer = dom.Server("192.168.0.149", "5555")
+        self.__filename = ""
         return
 
     def onStart(self):
@@ -87,27 +88,21 @@ class BasePlugin:
 
         html = html.replace('<script src="/javascript/thermostat_schedule.js">', '<script>' + javascript)
         
+        html = html.replace('<script src="/tobereplaced.js">', '<script>var maxslider=' + Parameters['Mode2'] + ";")
+        
+        
         html = html.replace(' src="/', ' src="http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/')
         html = html.replace(' href="/', ' href="http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/')
         html = html.replace('"schedule.json"', '"http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/thermostat_schedule.json"')
+        html = html.replace('"timer_plans.json"', '"http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/timer_plans.json"')
         html = html.replace('"save"', '"http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/save"')
+        html = html.replace('"changetimerplan"', '"http://' + Parameters['Address'] + ':' + Parameters['Mode1'] + '/changetimerplan"')
         
-
-
-        Utils.writeText(html, Parameters['StartupFolder'] + 'www/templates/Scheduler-' + str(Parameters["HardwareID"]) + '.html')
-
-        #self.dbConnection = sqlite3.connect(Parameters['Database'])
-
-        #c = self.dbConnection.cursor()
-
-        #c.execute('''CREATE TABLE IF NOT EXISTS SchedulerPlugin(HardwareID real, json text, UNIQUE(HardwareID))''')
-
-        #c.execute('INSERT OR IGNORE INTO SchedulerPlugin(HardwareID, json) VALUES (?,?)', (Parameters["HardwareID"], json))
-
-        #self.dbConnection.commit()
-
         if (len(Devices) == 0):
-            Domoticz.Device(Name="Thermostat", Unit=1, Type=242, Subtype=1, Used=1).Create()
+            Domoticz.Device(Name=Parameters['Name'], Unit=1, Type=242, Subtype=1, Used=1).Create()
+        
+        self.__filename = Parameters['StartupFolder'] + 'www/templates/Scheduler-' + "".join(x for x in Parameters['Name'] if x.isalnum()) + '.html'
+        Utils.writeText(html, self.__filename)
 
         Domoticz.Log("Domoticz-API server is: " + str(self.__domServer))
 
@@ -117,10 +112,7 @@ class BasePlugin:
         
     def onStop(self):
         LogMessage("onStop called")
-
-        if self.dbConnection != None:
-            self.dbConnection.close()
-
+        Utils.deleteFile(self.__filename)
         LogMessage("Leaving onStop")
 
 
@@ -155,16 +147,9 @@ class BasePlugin:
                 LogMessage("Mime type determined as " + mimetype)
                 LogMessage("Path is " + path)
 
-                #return_type = get_best_match(Data['Headers']['Accept'], ['text/html', 'image/png', 'text/css', '*/*'])
                 return_type = mimetype
 
                 if path == '/thermostat_schedule.json':
-
-                    #c = self.dbConnection.cursor()
-                    #c.execute('SELECT json FROM SchedulerPlugin WHERE HardwareID=?', (Parameters["HardwareID"],))
-                    #data = c.fetchone()[0]
-                    
-                    #self.dbConnection.commit()
 
                     timers = dom.SetPointTimer.loadbythermostat(self.__thermostat)
                     data = str(TimersToJson(timers)).replace("'", "\"")
@@ -178,7 +163,32 @@ class BasePlugin:
                                                 "Content-Length":""+str(len(data))+"",
                                                 "Pragma": "no-cache",
                                                 "Expires": "0"},
-                                    "Data": data})               
+                                    "Data": data})
+                                    
+                elif path == '/timer_plans.json':
+
+                    plans = self.__domServer.timerplans
+                    activeplan = self.__domServer.setting.get_value("ActiveTimerPlan")
+                    
+                    for plan in plans:
+                        if (str(activeplan) == str(plan["idx"])):
+                            plan["isactive"] = "true"
+                        else:
+                            plan["isactive"] = "false"
+                            
+                    timerplans = str(plans).replace("'", "\"")
+                            
+                    Connection.Send({"Status":"200", 
+                                    "Headers": {"Connection": "keep-alive", 
+                                                "Accept-Encoding": "gzip, deflate",
+                                                "Access-Control-Allow-Origin":"http://" + Parameters['Address'] + ":" + Parameters['Port'] + "",
+                                                "Cache-Control": "no-cache, no-store, must-revalidate",
+                                                "Content-Type": "application/json; charset=UTF-8",
+                                                "Content-Length":""+str(len(timerplans))+"",
+                                                "Pragma": "no-cache",
+                                                "Expires": "0"},
+                                    "Data": timerplans})               
+    
 
                 elif (return_type == 'text/html' or return_type == 'text/css' or return_type == 'text/plain'):
                     data = Utils.readFile(filePath, False)
@@ -216,11 +226,11 @@ class BasePlugin:
                 strURL = Data["URL"]
                 path = urllib.parse.unquote_plus(urllib.parse.urlparse(strURL).path)
 
+                jsn = Data["Data"]
+                              
                 if (path == "/save"):
 
-                    json = Data["Data"]
-
-                    newtimers = JsonToTimers(self.__thermostat, json)
+                    newtimers = JsonToTimers(self.__thermostat, jsn)
                     
                     oldtimers = dom.SetPointTimer.loadbythermostat(self.__thermostat)
                     
@@ -230,27 +240,26 @@ class BasePlugin:
                             
                     for newtimer in newtimers:
                         newtimer.add()
-                                      
+
+                elif (path == "/changetimerplan"):
                     
-                    #cur = self.dbConnection.cursor()
-
-                    #cur.execute("UPDATE SchedulerPlugin SET json=? WHERE HardwareID=?", (json, Parameters["HardwareID"]))
-
-                    #self.dbConnection.commit()
-
-                    data = "{\"status\":\"OK\"}"
-     
-                    Connection.Send({"Status":"200", 
-                                    "Headers": {"Connection": "keep-alive", 
-                                                "Accept-Encoding": "gzip, deflate",
-                                                "Access-Control-Allow-Origin":"http://" + Parameters['Address'] + ":" + Parameters['Port'] + "",
-                                                "Cache-Control": "no-cache, no-store, must-revalidate",
-                                                "Content-Type": "application/json; charset=UTF-8",
-                                                "Content-Length":""+str(len(data))+"",
-                                                "Pragma": "no-cache",
-                                                "Expires": "0"},
-                                    "Data": data})
-
+                    j = json.loads(jsn)
+                                                         
+                    self.__domServer.setting.set_value("ActiveTimerPlan", j["activetimerplan"])
+                                      
+                data = "{\"status\":\"OK\"}"
+ 
+                Connection.Send({"Status":"200", 
+                                "Headers": {"Connection": "keep-alive", 
+                                            "Accept-Encoding": "gzip, deflate",
+                                            "Access-Control-Allow-Origin":"http://" + Parameters['Address'] + ":" + Parameters['Port'] + "",
+                                            "Cache-Control": "no-cache, no-store, must-revalidate",
+                                            "Content-Type": "application/json; charset=UTF-8",
+                                            "Content-Length":""+str(len(data))+"",
+                                            "Pragma": "no-cache",
+                                            "Expires": "0"},
+                                "Data": data})
+                
 
             elif (strVerb == "OPTIONS"):
                 Connection.Send({"Status":"200 OK", 
@@ -289,6 +298,11 @@ class BasePlugin:
 
     def onHeartbeat(self):
         Domoticz.Log("onHeartbeat called")
+        
+#    def onDeviceModified(self, Unit):
+#        Domoticz.Log("onCommand called for Unit " + str(Unit))
+       
+      
 
 global _plugin
 _plugin = BasePlugin()
@@ -324,33 +338,34 @@ def onDisconnect(Connection):
 def onHeartbeat():
     global _plugin
     _plugin.onHeartbeat()
+    
+#def onDeviceModified(Unit):
+    #global _plugin
+    #_plugin.onDeviceModified(Unit)    
 
 # Generic helper functions
 def TimersToJson(timers):
-    tmrdict = { "heat": { "monday": [], "tuesday": [], "wednesday": [], "thursday": [], "friday" : [], "saturday": [], "sunday": []}, "cool": { "monday": [], "tuesday": [], "wednesday": [], "thursday": [], "friday" : [], "saturday": [], "sunday": []}}
-    tmrheat = tmrdict["heat"]
-    #return tmrdict
+    tmrdict = {  "monday": [], "tuesday": [], "wednesday": [], "thursday": [], "friday" : [], "saturday": [], "sunday": []}
     for timer in timers:
         if (timer.timertype == dom.TimerTypes.TME_TYPE_ON_TIME):
             if dom.TimerDays.Monday in timer.days:
-                tmrheat["monday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
+                tmrdict["monday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
             if dom.TimerDays.Tuesday in timer.days:
-                tmrheat["tuesday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
+                tmrdict["tuesday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
             if dom.TimerDays.Wednesday in timer.days:
-                tmrheat["wednesday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
+                tmrdict["wednesday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
             if dom.TimerDays.Thursday in timer.days:
-                tmrheat["thursday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
+                tmrdict["thursday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
             if dom.TimerDays.Friday in timer.days:
-                tmrheat["friday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
+                tmrdict["friday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
             if dom.TimerDays.Saturday in timer.days:
-                tmrheat["saturday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
+                tmrdict["saturday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])
             if dom.TimerDays.Sunday in timer.days:
-                tmrheat["sunday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])   
+                tmrdict["sunday"].append([f"{timer.hour:02d}:{timer.minute:02d}", timer.temperature ])   
     return tmrdict
         
 def JsonToTimers(device, data):
-    dict = json.loads(data)
-    plan = dict["heat"]
+    plan = json.loads(data)
     timers = []
     for day in plan:
         timerday = dom.TimerDays[day.capitalize()]
@@ -372,7 +387,7 @@ def DumpConfigToLog():
         Domoticz.Debug("Device sValue:   '" + Devices[x].sValue + "'")
         Domoticz.Debug("Device LastLevel: " + str(Devices[x].LastLevel))
     return
-	
+    
 def LogMessage(Message):
     if Parameters["Mode6"] != "Normal":
         Domoticz.Log(Message)

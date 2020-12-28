@@ -93,7 +93,7 @@ ScheduleEntry.prototype.hhmmFromX = function( x ) {
 }
 
 
-function ScheduleSlider( schedule, day, canvas, imgref, selref, otherSS ) {
+function ScheduleSlider( day, canvas, imgref, selref, otherSS ) {
   // **** First some setup! ****
   
   this.canvas 	= canvas;
@@ -102,7 +102,6 @@ function ScheduleSlider( schedule, day, canvas, imgref, selref, otherSS ) {
   this.ctx 		= canvas.getContext( '2d' );
   this.margin  	= { top: 10, left: 20, right: 20, bottom: 10 };
 
-  this.schedule = schedule;
   this.day      = day;
 
   this.otherSS 	= otherSS;

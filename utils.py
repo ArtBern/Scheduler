@@ -32,3 +32,14 @@ class Utils:
             Domoticz.Log('File created: {}'.format(filePath))
         except Exception as err:
             Domoticz.Log(traceback.format_exc())
+    
+    def deleteFile(filePath):
+        try:
+            Domoticz.Log('Try delete file: {}'.format(filePath))
+            if os.path.exists(filePath):
+              os.remove(filePath)
+              Domoticz.Log('File deleted: {}'.format(filePath))
+            else:
+              Domoticz.Log('File does not exists: {}'.format(filePath))
+        except Exception as err:
+            Domoticz.Log(traceback.format_exc())
