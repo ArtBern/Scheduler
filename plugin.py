@@ -1,20 +1,28 @@
-
 """
-<plugin key="Scheduler" name="Weekly Scheduler" author="artbern" version="1.0.0" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://www.google.com/">
+<plugin key="Scheduler" name="Weekly Scheduler" author="artbern" version="1.0.0" wikilink="https://github.com/ArtBern/Scheduler" externallink="https://github.com/ArtBern/Scheduler">
     <description>
         <h2>Weekly Scheduler</h2><br/>
-        Overview...
+        Thermostat with weekly scheduler.
         <h3>Features</h3>
         <ul style="list-style-type:square">
-            <li>Feature one...</li>
-            <li>Feature two...</li>
+            <li>Reach UI for OnTime timers manipulation</li>
+            <li>Switch timerplans</li>
         </ul>
         <h3>Devices</h3>
         <ul style="list-style-type:square">
-            <li>Device Type - What it does...</li>
+            <li>Device Type - Virtual Thermostat with timers.</li>
         </ul>
         <h3>Configuration</h3>
-        Configuration options...
+		Ensure Custom tab is enabled at Domoticz settings.
+        Create Hardware, specify Domoticz connection and separate port.
+		Observe new menu item under "Custom" tab.
+		<h3>Prerequisites</h3>
+		Plugin requires Domoticz-API module
+		https://github.com/ArtBern/Domoticz-API
+		<br/>
+		Domoticz-API installation instruction:
+		https://github.com/Xorfor/Domoticz-API/wiki/Installation
+		
     </description>
     <params>
         <param field="Address" label="IP Address" width="180px" required="true" default="192.168.1.x"/>
