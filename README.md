@@ -1,6 +1,8 @@
 # Scheduler
 Thermostat Weekly Scheduler python plugin for Domoticz home automation system system
 
+Inspired by https://github.com/chaeron/thermostat
+
 Easy UI for timers manipulation. Setup OnTime timers and manage TimerPlans. 
 
 Plugin creates VirtualThermostat Device and takes controls over associated OnTime timers.
