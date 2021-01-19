@@ -71,7 +71,7 @@ class BasePlugin:
     
     
     def __init__(self):
-        self.__domServer = dom.Server("localhost", "81")
+        self.__domServer = dom.Server(Parameters['Address'], Parameters['Port'])
         #self.__domServer = dom.Server("192.168.0.149", "5555")
         self.__filename = ""
         return
