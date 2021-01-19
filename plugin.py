@@ -71,8 +71,6 @@ class BasePlugin:
     
     
     def __init__(self):
-        self.__domServer = dom.Server(Parameters['Address'], Parameters['Port'])
-        #self.__domServer = dom.Server("192.168.0.149", "5555")
         self.__filename = ""
         return
 
@@ -83,6 +81,8 @@ class BasePlugin:
         DumpConfigToLog()
         self.httpServerConn = Domoticz.Connection(Name="Server Connection", Transport="TCP/IP", Protocol="HTTP", Port=Parameters["Mode1"])
         self.httpServerConn.Listen()
+		
+        self.__domServer = dom.Server(Parameters['Address'], Parameters['Port'])
 
         html = Utils.readFile(os.path.join(Parameters['HomeFolder'], 'web/html/thermostat_schedule.html'), False)
         javascript = Utils.readFile(os.path.join(Parameters['HomeFolder'], 'web/javascript/thermostat_schedule.js'), False)
@@ -423,3 +423,4 @@ def DumpHTTPResponseToLog(httpResp, level=0):
             Domoticz.Debug(indentStr + "['" + x + "']")
     else:
         Domoticz.Debug(indentStr + ">'" + x + "':'" + str(httpResp[x]) + "'")
+
